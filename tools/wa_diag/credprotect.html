@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>credProtect 复现测试</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background:#f6f7f9; color:#1b1f24; margin:0; padding:24px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { color:#666; font-size:13px; margin-bottom:18px; line-height:1.7; }
+  .card { background:#fff; border:1px solid #e3e6ea; border-radius:10px; padding:14px 18px; max-width:900px; margin-bottom:12px; }
+  .head { display:flex; align-items:center; gap:10px; }
+  .head .id { width:26px; height:26px; border-radius:50%; background:#e8eef8; color:#1a56c4; font-size:13px; font-weight:600; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  .head .t { font-size:14px; font-weight:600; }
+  .head .d { margin-left:auto; }
+  button { border:0; border-radius:8px; padding:9px 16px; font-size:14px; background:#1a56c4; color:#fff; cursor:pointer; }
+  button:disabled { background:#c9d0d9; cursor:not-allowed; }
+  pre { background:#0f1419; color:#d7dde3; padding:12px; border-radius:8px; font-size:12px; line-height:1.5; overflow:auto; max-height:220px; white-space:pre-wrap; word-break:break-all; margin:10px 0 0; }
+  .ok { color:#11703b; font-weight:600; }
+  .bad { color:#a4231c; font-weight:600; }
+</style>
+</head>
+<body>
+<h1>credProtect / UV 组合复现</h1>
+<div class="sub">
+这组测试模仿 webauthn.io 的默认参数：<b>residentKey=preferred、userVerification=preferred</b>，并加上 <b>credProtect=UVRequired</b>。<br>
+每步点了会弹提示，<b>能输入 PIN 就输入</b>；遇到不再弹 PIN 的步骤属于正常（那正是我们要测的）。
+</div>
+
+<div class="card">
+  <div class="head"><div class="id">A</div><div class="t">注册：带 credProtect=UVRequired，rk/uv 都用 preferred</div><div class="d"><button id="bA">开始</button></div></div>
+  <pre id="outA">等待…</pre>
+</div>
+<div class="card">
+  <div class="head"><div class="id">B</div><div class="t">认证：userVerification = <b>preferred</b></div><div class="d"><button id="bB" disabled>开始</button></div></div>
+  <pre id="outB">等待…</pre>
+</div>
+<div class="card">
+  <div class="head"><div class="id">C</div><div class="t">认证：userVerification = <b>discouraged</b>（不走 UV）</div><div class="d"><button id="bC" disabled>开始</button></div></div>
+  <pre id="outC">等待…</pre>
+</div>
+<div class="card">
+  <div class="head"><div class="id">D</div><div class="t">认证：userVerification = <b>required</b></div><div class="d"><button id="bD" disabled>开始</button></div></div>
+  <pre id="outD">等待…</pre>
+</div>
+<div class="card">
+  <div class="head"><div class="id">E</div><div class="t">对照组：注册<b>不带</b> credProtect，rk/uv 仍 preferred</div><div class="d"><button id="bE" disabled>开始</button></div></div>
+  <pre id="outE">等待…</pre>
+</div>
+<div class="card">
+  <div class="head"><div class="id">F</div><div class="t">对照组认证：userVerification = <b>preferred</b></div><div class="d"><button id="bF" disabled>开始</button></div></div>
+  <pre id="outF">等待…</pre>
+</div>
+
+<script>
+const RP_ID = 'localhost';
+const S = {};
+
+function b64u(buf) {
+  const b = new Uint8Array(buf);
+  let s = '';
+  for (const x of b) s += String.fromCharCode(x);
+  return btoa(s).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+function rand(n) { const a = new Uint8Array(n); crypto.getRandomValues(a); return a; }
+function show(k, txt, cls) { const el = document.getElementById('out' + k); el.textContent = txt; if (cls) el.className = cls; }
+async function log(o) { try { await fetch('/log', { method: 'POST', body: JSON.stringify(o) }); } catch (e) {} }
+
+async function run(k, nextKey, fn) {
+  document.getElementById('b' + k).disabled = true;
+  show(k, '进行中…');
+  const t0 = performance.now();
+  try {
+    const r = await fn();
+    const ms = Math.round(performance.now() - t0);
+    show(k, JSON.stringify(r, null, 2), 'ok');
+    await log({ group: 'credprotect', step: k, ok: true, ms, result: r });
+  } catch (e) {
+    const ms = Math.round(performance.now() - t0);
+    const info = { name: e.name, message: e.message, ms };
+    show(k, JSON.stringify(info, null, 2), 'bad');
+    await log({ group: 'credprotect', step: k, ok: false, ms, error: info });
+  }
+  if (nextKey) { const n = document.getElementById('b' + nextKey); if (n) n.disabled = false; }
+}
+
+async function create(useCredProtect) {
+  const pk = {
+    rp: { id: RP_ID, name: 'OpenSK credProtect Test' },
+    user: { id: rand(16), name: 'cp' + Date.now() + '@example.test', displayName: 'credProtect Test User' },
+    challenge: rand(32),
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+    authenticatorSelection: {
+      authenticatorAttachment: 'cross-platform',
+      residentKey: 'preferred',
+      userVerification: 'preferred'
+    },
+    attestation: 'none',
+    timeout: 120000
+  };
+  if (useCredProtect) pk.extensions = { credProtect: 2 };
+  const cred = await navigator.credentials.create({ publicKey: pk });
+  return {
+    idLength: cred.rawId.byteLength,
+    idB64: b64u(cred.rawId),
+    attachment: cred.authenticatorAttachment,
+    ext: cred.getClientExtensionResults(),
+    credProtectEcho: cred.getClientExtensionResults().credProtect
+  };
+}
+
+async function getWith(id, uv) {
+  const a = await navigator.credentials.get({
+    publicKey: {
+      rpId: RP_ID,
+      challenge: rand(32),
+      allowCredentials: [{ type: 'public-key', id }],
+      userVerification: uv,
+      timeout: 120000
+    }
+  });
+  return { found: true, idLength: a.rawId.byteLength, sameId: b64u(a.rawId) === b64u(id), uvAsked: uv };
+}
+
+document.getElementById('bA').onclick = () => run('A', 'B', async () => {
+  const r = await create(true);
+  S.idA = Uint8Array.from(atob(r.idB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  return r;
+});
+document.getElementById('bB').onclick = () => run('B', 'C', () => getWith(S.idA, 'preferred'));
+document.getElementById('bC').onclick = () => run('C', 'D', () => getWith(S.idA, 'discouraged'));
+document.getElementById('bD').onclick = () => run('D', 'E', () => getWith(S.idA, 'required'));
+document.getElementById('bE').onclick = () => run('E', 'F', async () => {
+  const r = await create(false);
+  S.idE = Uint8Array.from(atob(r.idB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  return r;
+});
+document.getElementById('bF').onclick = () => run('F', null, () => getWith(S.idE, 'preferred'));
+</script>
+</body>
+</html>

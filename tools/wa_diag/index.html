@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>OpenSK 凭据诊断</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background:#f6f7f9; color:#1b1f24; margin:0; padding:24px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { color:#666; font-size:13px; margin-bottom:18px; }
+  .card { background:#fff; border:1px solid #e3e6ea; border-radius:10px; padding:16px 18px; max-width:900px; }
+  .head { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .head .id { width:26px; height:26px; border-radius:50%; background:#e8eef8; color:#1a56c4; font-size:13px; font-weight:600; display:flex; align-items:center; justify-content:center; }
+  .head .t { font-size:14px; font-weight:600; }
+  .head .d { font-size:12px; color:#7a828c; margin-left:auto; }
+  button { border:0; border-radius:8px; padding:10px 18px; font-size:14px; background:#1a56c4; color:#fff; cursor:pointer; }
+  button:disabled { background:#c9d0d9; cursor:not-allowed; }
+  pre { background:#0f1419; color:#d7dde3; padding:12px; border-radius:8px; font-size:12px; line-height:1.5; overflow:auto; max-height:260px; white-space:pre-wrap; word-break:break-all; margin:12px 0 0; }
+  .ok { color:#11703b; font-weight:600; }
+  .bad { color:#a4231c; font-weight:600; }
+</style>
+</head>
+<body>
+<h1>OpenSK 凭据诊断</h1>
+<div class="sub">按顺序点按钮，每步结果会自动记录。注册/认证时请按提示输入安全密钥的 PIN。</div>
+<div class="card">
+  <div class="head">
+    <div class="id" id="id0">1</div>
+    <div class="t">注册（要求可发现凭据 residentKey=required）</div>
+    <div class="d"><button id="b0">开始</button></div>
+  </div>
+  <pre id="out0">等待…</pre>
+</div>
+<div class="card" style="margin-top:12px">
+  <div class="head">
+    <div class="id" id="id1">2</div>
+    <div class="t">认证：带 allowCredentials = [刚才的凭据]（和 webauthn.io 一样）</div>
+    <div class="d"><button id="b1" disabled>开始</button></div>
+  </div>
+  <pre id="out1">等待…</pre>
+</div>
+<div class="card" style="margin-top:12px">
+  <div class="head">
+    <div class="id" id="id2">3</div>
+    <div class="t">认证：allowCredentials = 空（纯可发现凭据查找）</div>
+    <div class="d"><button id="b2" disabled>开始</button></div>
+  </div>
+  <pre id="out2">等待…</pre>
+</div>
+<div class="card" style="margin-top:12px">
+  <div class="head">
+    <div class="id" id="id3">4</div>
+    <div class="t">注册（非可发现 residentKey=discouraged，测试另一种存储路径）</div>
+    <div class="d"><button id="b3" disabled>开始</button></div>
+  </div>
+  <pre id="out3">等待…</pre>
+</div>
+<div class="card" style="margin-top:12px">
+  <div class="head">
+    <div class="id" id="id4">5</div>
+    <div class="t">认证：带 allowCredentials = 第 4 步的凭据</div>
+    <div class="d"><button id="b4" disabled>开始</button></div>
+  </div>
+  <pre id="out4">等待…</pre>
+</div>
+
+<script>
+const RP_ID = 'localhost';
+const state = {};
+
+function b64u(buf) {
+  const b = new Uint8Array(buf);
+  let s = '';
+  for (const x of b) s += String.fromCharCode(x);
+  return btoa(s).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+function hex(buf) {
+  return Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2, '0')).join('');
+}
+function rand(n) { const a = new Uint8Array(n); crypto.getRandomValues(a); return a; }
+function show(i, text, cls) {
+  const el = document.getElementById('out' + i);
+  el.textContent = text;
+  if (cls) el.className = cls;
+}
+async function log(obj) {
+  try { await fetch('/log', { method: 'POST', body: JSON.stringify(obj) }); } catch (e) {}
+}
+
+async function run(i, fn) {
+  const btn = document.getElementById('b' + i);
+  btn.disabled = true;
+  show(i, '进行中…请操作安全密钥');
+  const t0 = performance.now();
+  try {
+    const res = await fn();
+    const ms = Math.round(performance.now() - t0);
+    show(i, JSON.stringify(res, null, 2), 'ok');
+    await log({ step: i + 1, ok: true, ms, result: res });
+    const next = document.getElementById('b' + (i + 1));
+    if (next) next.disabled = false;
+  } catch (e) {
+    const ms = Math.round(performance.now() - t0);
+    const info = { name: e.name, message: e.message, ms };
+    show(i, JSON.stringify(info, null, 2), 'bad');
+    await log({ step: i + 1, ok: false, ms, error: info });
+    const next = document.getElementById('b' + (i + 1));
+    if (next) next.disabled = false;
+  }
+}
+
+document.getElementById('b0').onclick = () => run(0, async () => {
+  const userId = rand(16);
+  state.userId = userId;
+  const pk = {
+    rp: { id: RP_ID, name: 'OpenSK Diag' },
+    user: { id: userId, name: 'diag@example.test', displayName: 'Diag User' },
+    challenge: rand(32),
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+    authenticatorSelection: {
+      authenticatorAttachment: 'cross-platform',
+      residentKey: 'required',
+      requireResidentKey: true,
+      userVerification: 'required'
+    },
+    attestation: 'none',
+    timeout: 120000
+  };
+  const cred = await navigator.credentials.create({ publicKey: pk });
+  state.credId = new Uint8Array(cred.rawId);
+  state.credIdB64 = b64u(cred.rawId);
+  const out = {
+    attachment: cred.authenticatorAttachment,
+    idLength: cred.rawId.byteLength,
+    idB64: state.credIdB64,
+    idHex: hex(cred.rawId),
+    transports: cred.response.getTransports ? cred.response.getTransports() : null,
+    ext: cred.getClientExtensionResults()
+  };
+  out.verdict = out.idLength === 32
+    ? '32字节 => 走的是 resident(可发现凭据, 存 flash) 路径'
+    : '非32字节 => 走的是非 resident(加密 key handle) 路径';
+  return out;
+});
+
+document.getElementById('b1').onclick = () => run(1, async () => {
+  const getOpts = {
+    publicKey: {
+      rpId: RP_ID,
+      challenge: rand(32),
+      allowCredentials: [{ type: 'public-key', id: state.credId }],
+      userVerification: 'required',
+      timeout: 120000
+    }
+  };
+  const a = await navigator.credentials.get(getOpts);
+  return {
+    found: true,
+    idLength: a.rawId.byteLength,
+    sameId: b64u(a.rawId) === state.credIdB64,
+    attachment: a.authenticatorAttachment,
+    ext: a.getClientExtensionResults()
+  };
+});
+
+document.getElementById('b2').onclick = () => run(2, async () => {
+  const getOpts = {
+    publicKey: {
+      rpId: RP_ID,
+      challenge: rand(32),
+      allowCredentials: [],
+      userVerification: 'required',
+      timeout: 120000
+    }
+  };
+  const a = await navigator.credentials.get(getOpts);
+  return {
+    found: true,
+    idLength: a.rawId.byteLength,
+    idB64: b64u(a.rawId),
+    sameAsStep1: b64u(a.rawId) === state.credIdB64,
+    userHandle: a.response.userHandle ? b64u(a.response.userHandle) : null
+  };
+});
+
+document.getElementById('b3').onclick = () => run(3, async () => {
+  const userId = rand(16);
+  const pk = {
+    rp: { id: RP_ID, name: 'OpenSK Diag' },
+    user: { id: userId, name: 'diag2@example.test', displayName: 'Diag Two' },
+    challenge: rand(32),
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+    authenticatorSelection: {
+      authenticatorAttachment: 'cross-platform',
+      residentKey: 'discouraged',
+      requireResidentKey: false,
+      userVerification: 'required'
+    },
+    attestation: 'none',
+    timeout: 120000
+  };
+  const cred = await navigator.credentials.create({ publicKey: pk });
+  state.credId2 = new Uint8Array(cred.rawId);
+  state.credId2B64 = b64u(cred.rawId);
+  const out = {
+    attachment: cred.authenticatorAttachment,
+    idLength: cred.rawId.byteLength,
+    idB64: state.credId2B64,
+    transports: cred.response.getTransports ? cred.response.getTransports() : null,
+    ext: cred.getClientExtensionResults()
+  };
+  out.verdict = out.idLength === 32
+    ? '32字节 => 仍是 resident 路径'
+    : '非32字节 => 非 resident(加密 key handle) 路径';
+  return out;
+});
+
+document.getElementById('b4').onclick = () => run(4, async () => {
+  const getOpts = {
+    publicKey: {
+      rpId: RP_ID,
+      challenge: rand(32),
+      allowCredentials: [{ type: 'public-key', id: state.credId2 }],
+      userVerification: 'required',
+      timeout: 120000
+    }
+  };
+  const a = await navigator.credentials.get(getOpts);
+  return { found: true, sameId: b64u(a.rawId) === state.credId2B64 };
+});
+</script>
+</body>
+</html>

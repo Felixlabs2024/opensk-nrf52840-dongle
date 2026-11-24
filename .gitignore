@@ -1,0 +1,18 @@
+# 构建产物与临时文件
+out/
+*.tmp
+
+# scripts/protect.sh 生成的中间文件
+uicr_backup_before_protect.bin
+uicr_with_approtect.bin
+
+# 诊断页运行时产物
+tools/wa_diag/diag.log
+tools/wa_diag/server_out.txt
+__pycache__/
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+.DS_Store

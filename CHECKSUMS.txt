@@ -1,0 +1,4 @@
+# 在仓库根目录执行: sha256sum -c CHECKSUMS.txt
+41dad2183eeb6fcf966720d5db909b0d2a61993c3691627ad8e2faad534ce386 *firmware/opensk-nrf52840dongle.elf
+ed7da4439fd05892ef7760667ea15efeeead50b055ff997a6e080199e1c9b37c *firmware/uicr/uicr-approtect.bin
+78a2302a9924305071e03c4904173657dd9498c04ef57fc2d169d00115faf32a *firmware/uicr/uicr-no-protection.bin

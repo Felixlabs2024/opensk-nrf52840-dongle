@@ -1,0 +1,6 @@
+[package]
+name = "panic-abort"
+version = "0.3.2"
+edition = "2018"
+description = "Set panicking behavior to abort (patched for newer nightlies)"
+license = "MIT OR Apache-2.0"

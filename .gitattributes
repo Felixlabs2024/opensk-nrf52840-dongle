@@ -1,0 +1,13 @@
+# 统一换行符，防止补丁在 Windows 上被转成 CRLF 后 git apply 失败
+# Normalize line endings so patches stay applicable on Windows checkouts.
+* text=auto eol=lf
+
+*.patch text eol=lf
+*.sh    text eol=lf
+*.md    text eol=lf
+*.py    text eol=lf
+*.toml  text eol=lf
+
+# 二进制：不要做任何转换
+*.elf   binary
+*.bin   binary

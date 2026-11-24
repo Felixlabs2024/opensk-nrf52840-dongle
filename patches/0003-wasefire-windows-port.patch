@@ -1,0 +1,167 @@
+diff --git a/crates/cli-tools/src/action.rs b/crates/cli-tools/src/action.rs
+index a333797b..e7e2ff49 100644
+--- a/crates/cli-tools/src/action.rs
++++ b/crates/cli-tools/src/action.rs
+@@ -988,7 +988,7 @@ impl Display for OptLevel {
+ }
+ 
+ async fn nightly_toolchain(cargo: &mut Command) {
+-    const TOOLCHAIN: &str = "nightly-2026-10-02";
++    const TOOLCHAIN: &str = "nightly-2026-10-05";
+     let mut rustup = Command::new("rustup");
+     rustup.arg("--version");
+     rustup.stdout(std::process::Stdio::null());
+diff --git a/crates/cli-tools/src/action/protocol.rs b/crates/cli-tools/src/action/protocol.rs
+index d50740b6..17d4615a 100644
+--- a/crates/cli-tools/src/action/protocol.rs
++++ b/crates/cli-tools/src/action/protocol.rs
+@@ -41,13 +41,23 @@ impl Protocol {
+     pub(crate) async fn connect(&self, timeout: Duration) -> Result<DynDevice> {
+         let connection: Box<dyn Connection> = match self {
+             Protocol::Usb(x) => return x.connect(timeout).await,
+-            Protocol::Unix(x) => Box::new(wasefire_protocol_tokio::Connection::new_unix(x).await?),
++            Protocol::Unix(x) => connect_unix(x).await?,
+             Protocol::Tcp(x) => Box::new(wasefire_protocol_tokio::Connection::new_tcp(*x).await?),
+         };
+         DynDevice::new(connection).await
+     }
+ }
+ 
++#[cfg(unix)]
++async fn connect_unix(x: &PathBuf) -> Result<Box<dyn Connection>> {
++    Ok(Box::new(wasefire_protocol_tokio::Connection::new_unix(x).await?))
++}
++
++#[cfg(not(unix))]
++async fn connect_unix(_x: &PathBuf) -> Result<Box<dyn Connection>> {
++    bail!("Unix protocol is not supported on Windows")
++}
++
+ impl ProtocolUsb {
+     async fn connect(&self, timeout: Duration) -> Result<DynDevice> {
+         let context = GlobalContext::default();
+diff --git a/crates/cli-tools/src/cmd.rs b/crates/cli-tools/src/cmd.rs
+index 0651abae..d21fb57d 100644
+--- a/crates/cli-tools/src/cmd.rs
++++ b/crates/cli-tools/src/cmd.rs
+@@ -14,6 +14,7 @@
+ 
+ //! Helpers around `tokio::process::Command`.
+ 
++#[cfg(unix)]
+ use std::os::unix::process::CommandExt;
+ use std::process::Output;
+ 
+@@ -51,7 +52,14 @@ pub async fn execute(command: &mut Command) -> Result<()> {
+ /// Replaces the current program with the command.
+ pub fn replace(mut command: Command) -> ! {
+     debug!("{:?}", command.as_std());
++    #[cfg(unix)]
+     panic!("{}", command.as_std_mut().exec());
++    #[cfg(not(unix))]
++    {
++        // Windows 没有 exec(1):退化为运行子进程后以相同退出码结束。
++        let status = command.as_std_mut().spawn().expect("spawn").wait().expect("wait");
++        std::process::exit(status.code().unwrap_or(1));
++    }
+ }
+ 
+ /// Executes the command making sure it's successful and returns its output.
+diff --git a/crates/cli-tools/src/fs.rs b/crates/cli-tools/src/fs.rs
+index fc17355b..812fa704 100644
+--- a/crates/cli-tools/src/fs.rs
++++ b/crates/cli-tools/src/fs.rs
+@@ -17,6 +17,7 @@
+ use std::fs::{Metadata, Permissions};
+ use std::future::Future;
+ use std::io::ErrorKind;
++#[cfg(unix)]
+ use std::os::unix::fs::PermissionsExt;
+ use std::path::{Component, Path, PathBuf};
+ 
+@@ -90,6 +91,7 @@ pub async fn has_changed(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result
+     Ok(changed)
+ }
+ 
++#[cfg(unix)]
+ pub async fn chmod(mode: u32, path: impl AsRef<Path>) -> Result<()> {
+     let name = path.as_ref().display();
+     tokio::fs::set_permissions(path.as_ref(), Permissions::from_mode(mode))
+@@ -97,6 +99,13 @@ pub async fn chmod(mode: u32, path: impl AsRef<Path>) -> Result<()> {
+         .with_context(|| format!("chmod {mode:03o} {name}"))
+ }
+ 
++#[cfg(not(unix))]
++pub async fn chmod(_mode: u32, path: impl AsRef<Path>) -> Result<()> {
++    // Windows 无 POSIX 权限位:可执行性由扩展名决定,chmod 为无操作。
++    let _ = path.as_ref();
++    Ok(())
++}
++
+ pub async fn copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<u64> {
+     let src = from.as_ref().display();
+     let dst = to.as_ref().display();
+diff --git a/crates/protocol-tokio/src/host.rs b/crates/protocol-tokio/src/host.rs
+index 5b21c595..679ab32c 100644
+--- a/crates/protocol-tokio/src/host.rs
++++ b/crates/protocol-tokio/src/host.rs
+@@ -17,7 +17,9 @@ use std::path::Path;
+ 
+ use anyhow::Result;
+ use tokio::io::{AsyncRead, AsyncWrite};
+-use tokio::net::{TcpStream, UnixStream};
++use tokio::net::TcpStream;
++#[cfg(unix)]
++use tokio::net::UnixStream;
+ use tokio::sync::Mutex;
+ use wasefire_protocol::DynFuture;
+ 
+@@ -28,6 +30,7 @@ pub struct Connection<S: AsyncRead + AsyncWrite + Send + Unpin> {
+     stream: Mutex<S>,
+ }
+ 
++#[cfg(unix)]
+ impl Connection<UnixStream> {
+     pub async fn new_unix(path: &Path) -> Result<Self> {
+         let stream = Mutex::new(UnixStream::connect(path).await?);
+diff --git a/crates/xtask/src/main.rs b/crates/xtask/src/main.rs
+index bf779659..c27cc26e 100644
+--- a/crates/xtask/src/main.rs
++++ b/crates/xtask/src/main.rs
+@@ -461,6 +461,7 @@ enum ChangelogCommand {
+ impl Flags {
+     async fn execute(self) -> Result<()> {
+         if self.options.setsid {
++            #[cfg(unix)]
+             unsafe { libc::setsid() };
+         }
+         match self.command {
+@@ -1127,13 +1128,27 @@ async fn ensure_submodule(path: &str) -> Result<()> {
+ 
+ async fn ensure_command(cmd: &[&str]) -> Result<()> {
+     let mut wrapper = Command::new("./scripts/wrapper.sh");
++    #[cfg(windows)]
++    {
++        // Windows 无法直接执行 .sh,经由 Git Bash 运行 wrapper。
++        wrapper = Command::new("bash");
++        wrapper.arg("./scripts/wrapper.sh");
++    }
+     wrapper.args(cmd);
+     wrapper.env("WASEFIRE_WRAPPER_EXEC", "n");
+     cmd::execute(&mut wrapper).await
+ }
+ 
+ async fn wrap_command() -> Result<Command> {
+-    Ok(Command::new(fs::canonicalize("./scripts/wrapper.sh").await?))
++    #[cfg(unix)]
++    return Ok(Command::new(fs::canonicalize("./scripts/wrapper.sh").await?));
++    #[cfg(windows)]
++    {
++        // Windows:经由 Git Bash 运行 wrapper.sh。
++        let mut wrapper = Command::new("bash");
++        wrapper.arg("./scripts/wrapper.sh");
++        Ok(wrapper)
++    }
+ }
+ 
+ fn section_offset(elf: &[u8], name: &str) -> Result<usize> {
