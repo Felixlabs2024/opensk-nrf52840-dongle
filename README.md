@@ -16,6 +16,10 @@
 </div>
 
 > [!IMPORTANT]
+> **推荐使用智能体（AI Agent）阅读并使用本代码库。**
+>
+> **Recommended: read and use this repository with an AI agent.**
+>
 > 这个仓库存在的理由：网上关于"用 OpenSK 自制 FIDO2 密钥"的教程，几乎都在**最后一公里**卡住——固件刷进去了，设备却永远停在 `Open DFU Bootloader`，然后没人告诉你为什么。
 > 我们踩完了整条路，把**真正的拦路虎**（`0xE0000` 的原厂 bootloader）、**烧录的坑**（`platform.hex` 不可用）、**Windows 上的编译环境**全部写进了文档，并附上可直接烧的固件。
 > 目标很朴素：**照着做，一把就成。**
