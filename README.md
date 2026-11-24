@@ -6,7 +6,7 @@
 *Turn an nRF52840 Dongle into a USB FIDO2 / passkey security key*
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Hardware](https://img.shields.io/badge/hardware-nRF52840%20Dongle-2ea44f.svg?style=flat)](#这是什么)
+[![MCU](https://img.shields.io/badge/MCU-nRF52840-2ea44f.svg)](#这是什么)
 [![Standard](https://img.shields.io/badge/CTAP2-FIDO2-ff6f00.svg)](https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-client-to-authenticator-protocol-v2.0-id-20180227.html)
 [![Firmware](https://img.shields.io/badge/prebuilt-389%20KB-informational.svg)](firmware/opensk-nrf52840dongle.elf)
 [![Status](https://img.shields.io/badge/status-verified%20on%20real%20hardware-brightgreen.svg)](#功能验证)
