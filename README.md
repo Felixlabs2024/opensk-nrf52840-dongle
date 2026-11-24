@@ -2,14 +2,14 @@
 
 # OpenSK Passkey on nRF52840 Dongle
 
-**把一块 nRF52840 Dongle 变成 USB FIDO2 / Passkey 硬件密钥**
-**Turn an nRF52840 Dongle into a USB FIDO2 / passkey security key**
+**把一块 nRF52840 Dongle 变成 USB FIDO2 / Passkey 硬件密钥**<br>
+*Turn an nRF52840 Dongle into a USB FIDO2 / passkey security key*
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Hardware](https://img.shields.io/badge/hardware-nRF52840%20Dongle-2ea44f.svg))(#这是什么)
+[![Hardware](https://img.shields.io/badge/hardware-nRF52840%20Dongle-2ea44f.svg)](#这是什么)
 [![Standard](https://img.shields.io/badge/CTAP2-FIDO2-ff6f00.svg)](https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-client-to-authenticator-protocol-v2.0-id-20180227.html)
 [![Firmware](https://img.shields.io/badge/prebuilt-389%20KB-informational.svg)](firmware/opensk-nrf52840dongle.elf)
-[![Status](https://img.shields.io/badge/status-verified%20on%20real%20hardware-brightgreen.svg))(#功能验证)
+[![Status](https://img.shields.io/badge/status-verified%20on%20real%20hardware-brightgreen.svg)](#功能验证)
 [![Built with](https://img.shields.io/badge/built%20with-Rust-dea584.svg?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 
 **中文** ｜ [**English**](#english) ｜ [**在线交互版 / Live page**](https://felixlabs2024.github.io/opensk-nrf52840-dongle/)
